@@ -1,0 +1,10 @@
+.env
+disaster-monitoring-*.json
+*.pyc
+__pycache__/
+.DS_Store
+.venv/
+.env.local
+output.log
+.bat
+disaster-monitoring-sachin-658f83d7f9e1.json

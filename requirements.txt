@@ -1,0 +1,15 @@
+folium
+streamlit
+streamlit_folium
+seaborn
+pandas
+pymongo
+matplotlib
+wordcloud
+plotly
+numpy
+requests
+spacy
+geopy
+firebase-admin
+python-dotenv
