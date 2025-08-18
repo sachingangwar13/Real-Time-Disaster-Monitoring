@@ -22,14 +22,18 @@ NEWSAPI_ENDPOINT = 'https://newsapi.org/v2/everything'
 disaster_keywords = ['earthquake', 'flood', 'tsunami', 'hurricane', 'wildfire', 'forestfire', 'tornado', 'cyclone', 'volcano', 'drought', 'landslide', 'storm', 'blizzard', 'avalanche', 'heatwave']
 
 # Load the spaCy English language model
-nlp = spacy.load("en_core_web_sm")
+try:
+    nlp = spacy.load("en_core_web_sm")
+except Exception:
+    # Fallback to a blank English model if the small model isn't available
+    nlp = spacy.blank("en")
 
 # Initialize geocoder
 geolocator = Nominatim(user_agent="my_geocoder")
 
 def fetch_live_data(keyword):
     # Calculate the date 2 days ago
-    days_ago = datetime.datetime.now() - datetime.timedelta(days=15)
+    days_ago = datetime.datetime.now() - datetime.timedelta(days=2)
     
     params = {
         'apiKey': NEWSAPI_KEY,
@@ -79,6 +83,11 @@ def get_coordinates(location):
         return (np.nan, np.nan)
 
 if __name__ == "__main__":
+    # Validate required environment variables early to avoid hard failures in CI
+    if not NEWSAPI_KEY:
+        print("NEWSAPI_KEY is not set. Skipping data collection run.")
+        sys.exit(0)
+
     all_live_data = []
     for keyword in disaster_keywords:
         live_data = fetch_live_data(keyword)
@@ -97,12 +106,17 @@ if __name__ == "__main__":
     
     df = pd.DataFrame(all_live_data)
 
+    if df.empty:
+        print("No articles fetched from NewsAPI. Nothing to process.")
+        sys.exit(0)
+
     df['disaster_event'].replace(to_replace="Unknown", value=np.nan, inplace=True)
     df.dropna(axis=0, inplace=True)
     
     df.drop_duplicates(subset='title', inplace=True)
-    
-    df['source'] = df['source'].apply(lambda x: x['name'])
+
+    if 'source' in df.columns:
+        df['source'] = df['source'].apply(lambda x: x.get('name') if isinstance(x, dict) else x)
     
     df['location_ner'] = df['title'].apply(extract_location_ner)
     
@@ -140,7 +154,7 @@ if __name__ == "__main__":
     exclude_locations = ["world", "unknown"]
 
     df = df[~df['Location'].str.lower().isin(exclude_locations)]
-    df = df[~df['url'].str.lower().str.contains('politics|yahoo|sports|entertainment|cricket')]
+    df = df[~df['url'].str.lower().str.contains('politics|yahoo|sports|entertainment|cricket', na=False)]
 
     df['Coordinates'] = df['Location'].apply(get_coordinates)
 
@@ -152,6 +166,9 @@ if __name__ == "__main__":
     # df.to_csv("disaster_news.csv", index=False)
     # MongoDB Atlas connection URI
     uri = os.getenv('MONGODB_URI')
+    if not uri:
+        print("MONGODB_URI is not set. Skipping database write. Processed rows:", len(df))
+        sys.exit(0)
 
     # Create a new client and connect to the server
     client = MongoClient(uri, server_api=ServerApi('1'))
