@@ -13,3 +13,4 @@ spacy
 geopy
 firebase-admin
 python-dotenv
+streamlit_option_menu
